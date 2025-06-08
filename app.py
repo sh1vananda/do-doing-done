@@ -7,9 +7,11 @@ import threading
 import html
 import string
 import random
+import os
+from secrets import token_hex
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'collaborative-task-manager-secret-key'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', token_hex(32))
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Thread-safe data storage
@@ -336,4 +338,5 @@ def handle_join_room(data):
         emit('error', {'message': 'Failed to join room'})
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, host='127.0.0.1', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    socketio.run(app, host='0.0.0.0', port=port, debug=False)
