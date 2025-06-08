@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ room_name }} - Task Collaborator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Pure black theme with proper spacing */
+        body {
+            background: #0a0a0a !important;
+            font-size: 14px;
+        }
+        
+        .htmx-request { opacity: 0.6; }
+        .task-item { transition: opacity 0.15s ease; cursor: default; }
+        
+        .drag-handle { cursor: grab; user-select: none; touch-action: none; }
+        .drag-handle:active { cursor: grabbing; }
+        
+        .sortable-ghost { opacity: 0.4; background: #2a2a2a !important; }
+        .sortable-chosen { background: #1a1a1a !important; }
+        
+        .editable {
+            cursor: text;
+        }
+        
+        .editable:hover { 
+            background-color: #1a1a1a !important; 
+            border: 1px solid #404040 !important;
+            border-radius: 3px;
+            padding: 2px 4px;
+        }
+        
+        .priority-high { color: #ef4444 !important; }
+        .priority-medium { color: #f59e0b !important; }
+        .priority-low { color: #10b981 !important; }
+        
+        .status-todo { background: rgba(239, 68, 68, 0.1) !important; color: #fca5a5 !important; }
+        .status-in_progress { background: rgba(245, 158, 11, 0.1) !important; color: #fcd34d !important; }
+        .status-done { background: rgba(16, 185, 129, 0.1) !important; color: #6ee7b7 !important; }
+        
+        .glass {
+            background: rgba(26, 26, 26, 0.95) !important;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(64, 64, 64, 0.3) !important;
+        }
+        
+        .btn-primary {
+            background-color: #2a2a2a !important;
+            border: 1px solid #404040 !important;
+            color: #e5e5e5 !important;
+        }
+        
+        .btn-primary:hover {
+            background-color: #404040 !important;
+            border-color: #525252 !important;
+        }
+        
+        /* Override ALL Tailwind colors */
+        .bg-gray-900 { background-color: #0a0a0a !important; }
+        .bg-gray-800 { background-color: #1a1a1a !important; }
+        .bg-gray-700 { background-color: #2a2a2a !important; }
+        .border-gray-800 { border-color: #2a2a2a !important; }
+        .border-gray-700 { border-color: #404040 !important; }
+        .border-gray-600 { border-color: #404040 !important; }
+        .text-gray-400 { color: #9ca3af !important; }
+        .text-gray-500 { color: #6b7280 !important; }
+        .text-white { color: #e5e5e5 !important; }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1a1a !important; }
+        ::-webkit-scrollbar-thumb { background: #404040 !important; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #525252 !important; }
+        
+        /* Column heights */
+        .task-column {
+            height: calc(100vh - 140px);
+            overflow-y: auto;
+        }
+        
+        .form-container {
+            height: calc(100vh - 140px);
+            overflow-y: auto;
+        }
+        
+        /* Remove ALL focus colors */
+        input:focus, textarea:focus, select:focus, button:focus {
+            outline: none !important;
+            border-color: #525252 !important;
+            box-shadow: 0 0 0 1px #525252 !important;
+        }
+        
+        * {
+            --tw-ring-color: #525252 !important;
+        }
+        
+        /* Drag drop zones */
+        .drop-zone {
+            min-height: 100px;
+            border: 2px dashed transparent;
+            transition: border-color 0.2s;
+        }
+        
+        .drop-zone.drag-over {
+            border-color: #404040;
+            background-color: rgba(64, 64, 64, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 h-screen overflow-hidden font-sans">
+    <!-- Header -->
+    <header class="border-b border-gray-800 py-3 px-6">
+        <div class="flex justify-between items-center">
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-3">
+                    <h1 class="text-lg font-semibold text-white">{{ room_name }}</h1>
+                    <span class="px-2 py-1 bg-gray-800 rounded text-xs font-mono">{{ room_id }}</span>
+                </div>
+                <div class="flex items-center space-x-3 text-sm text-gray-400">
+                    <div class="flex items-center space-x-1">
+                        <i class="fas fa-users text-xs"></i>
+                        <span id="member-count">1</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-3">
+                <div class="flex items-center space-x-2 text-sm">
+                    <span class="text-white">{{ username }}</span>
+                    {% if is_creator %}
+                    <span class="text-xs text-gray-400">
+                        <i class="fas fa-crown"></i>
+                    </span>
+                    {% endif %}
+                </div>
+                <button onclick="refreshTasks()" 
+                        class="h-8 px-3 text-gray-400 hover:text-gray-200 border border-gray-600 hover:border-gray-500 rounded transition-colors text-xs">
+                    <i class="fas fa-sync-alt mr-1"></i>Refresh
+                </button>
+                <button onclick="leaveRoom()" 
+                        class="h-8 px-3 text-red-400 hover:text-red-300 border border-red-600 hover:border-red-500 rounded transition-colors text-xs">
+                    <i class="fas fa-sign-out-alt mr-1"></i>Leave
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex h-full">
+        <!-- Create Task Form -->
+        <div class="w-80 border-r border-gray-800 flex flex-col">
+            <div class="p-4 form-container">
+                <h2 class="text-base font-medium mb-4 text-white flex items-center">
+                    <i class="fas fa-plus mr-2"></i>
+                    New Task
+                </h2>
+                
+                <form id="task-form" class="space-y-3">
+                    <div>
+                        <input type="text" 
+                               id="task-title" 
+                               placeholder="Task title" 
+                               required
+                               maxlength="100"
+                               class="w-full h-8 bg-gray-800 border border-gray-600 rounded px-3 text-gray-100 text-sm">
+                    </div>
+                    
+                    <div>
+                        <textarea id="task-description" 
+                                  placeholder="Description" 
+                                  rows="2"
+                                  maxlength="500"
+                                  class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-gray-100 text-sm resize-none"></textarea>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-2">
+                        <select id="task-priority" 
+                                class="h-8 bg-gray-800 border border-gray-600 rounded px-2 text-gray-100 text-sm">
+                            <option value="low">Low</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                        </select>
+                        
+                        <select id="task-assignee" 
+                                class="h-8 bg-gray-800 border border-gray-600 rounded px-2 text-gray-100 text-sm">
+                            <option value="">Unassigned</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <input type="date" 
+                               id="task-due-date" 
+                               class="w-full h-8 bg-gray-800 border border-gray-600 rounded px-3 text-gray-100 text-sm">
+                    </div>
+                    
+                    <button type="submit" 
+                            class="w-full h-8 btn-primary rounded text-sm font-medium transition-all flex items-center justify-center">
+                        <i class="fas fa-plus mr-2"></i>
+                        Create
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Three Column Layout -->
+        <div class="flex-1 flex">
+            <!-- To Do Column -->
+            <div id="todo-column" class="flex-1 border-r border-gray-800">
+                <div class="p-4 border-b border-gray-800">
+                    <h3 class="text-sm font-medium text-gray-300 flex items-center">
+                        <i class="fas fa-circle text-red-400 mr-2 text-xs"></i>
+                        To Do
+                        <span id="todo-count" class="ml-2 text-xs bg-gray-700 px-2 py-1 rounded">0</span>
+                    </h3>
+                </div>
+                <div class="task-column p-4">
+                    <div class="task-list drop-zone space-y-2" data-status="todo" id="todo-list">
+                        <!-- Todo tasks will be loaded here -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- In Progress Column -->
+            <div id="progress-column" class="flex-1 border-r border-gray-800">
+                <div class="p-4 border-b border-gray-800">
+                    <h3 class="text-sm font-medium text-gray-300 flex items-center">
+                        <i class="fas fa-circle text-yellow-400 mr-2 text-xs"></i>
+                        In Progress
+                        <span id="progress-count" class="ml-2 text-xs bg-gray-700 px-2 py-1 rounded">0</span>
+                    </h3>
+                </div>
+                <div class="task-column p-4">
+                    <div class="task-list drop-zone space-y-2" data-status="in_progress" id="progress-list">
+                        <!-- In progress tasks will be loaded here -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Done Column -->
+            <div id="done-column" class="flex-1">
+                <div class="p-4 border-b border-gray-800">
+                    <h3 class="text-sm font-medium text-gray-300 flex items-center">
+                        <i class="fas fa-circle text-green-400 mr-2 text-xs"></i>
+                        Done
+                        <span id="done-count" class="ml-2 text-xs bg-gray-700 px-2 py-1 rounded">0</span>
+                    </h3>
+                </div>
+                <div class="task-column p-4">
+                    <div class="task-list drop-zone space-y-2" data-status="done" id="done-list">
+                        <!-- Done tasks will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Global state
+        const socket = io();
+        const roomId = '{{ room_id }}';
+        const username = '{{ username }}';
+        let tasks = {};
+        let members = [];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeSocketEvents();
+            initializeFormHandlers();
+            joinRoom();
+        });
+
+        // Socket events
+        function initializeSocketEvents() {
+            socket.on('connect', () => {
+                console.log('Connected to server');
+            });
+
+            socket.on('room_joined', (data) => {
+                console.log('Joined room:', data.room_id);
+                loadTasks();
+            });
+
+            socket.on('user_joined', (data) => {
+                updateMemberCount(data.member_count);
+                updateAssigneeOptions();
+            });
+
+            socket.on('user_left', (data) => {
+                updateMemberCount(data.member_count);
+                updateAssigneeOptions();
+            });
+
+            // Real-time events
+            socket.on('task_created', (data) => {
+                console.log('Task created by another user:', data.task.id);
+                tasks[data.task.id] = data.task;
+                addTaskToDOM(data.task);
+                updateTaskCounts();
+            });
+
+            socket.on('task_updated', (data) => {
+                console.log('Task updated by another user:', data.task.id);
+                tasks[data.task.id] = data.task;
+                updateTaskInDOM(data.task, data.old_status);
+                updateTaskCounts();
+            });
+
+            socket.on('task_deleted', (data) => {
+                console.log('Task deleted:', data.task_id);
+                delete tasks[data.task_id];
+                removeTaskFromDOM(data.task_id);
+                updateTaskCounts();
+            });
+        }
+
+        function initializeFormHandlers() {
+            document.getElementById('task-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await createTask();
+            });
+        }
+
+        function joinRoom() {
+            socket.emit('join_room', {
+                username: username,
+                room_id: roomId
+            });
+        }
+
+        // Load all tasks
+        async function loadTasks() {
+            try {
+                const response = await fetch(`/api/tasks/${roomId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    tasks = {};
+                    members = data.members;
+                    
+                    // Clear all columns
+                    clearAllColumns();
+                    
+                    // Add tasks to appropriate columns
+                    Object.entries(data.tasks).forEach(([status, taskList]) => {
+                        taskList.forEach(task => {
+                            tasks[task.id] = task;
+                            addTaskToDOM(task);
+                        });
+                    });
+                    
+                    updateTaskCounts();
+                    updateAssigneeOptions();
+                    initializeDragDrop();
+                }
+            } catch (error) {
+                console.error('Error loading tasks:', error);
+            }
+        }
+
+        // Create task
+        async function createTask() {
+            const title = document.getElementById('task-title').value.trim();
+            if (!title) return;
+
+            const taskData = {
+                title: title,
+                description: document.getElementById('task-description').value.trim(),
+                priority: document.getElementById('task-priority').value,
+                assignee: document.getElementById('task-assignee').value,
+                due_date: document.getElementById('task-due-date').value,
+                room_id: roomId,
+                creator: username
+            };
+
+            try {
+                const response = await fetch('/api/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(taskData)
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Add to local state and DOM (creator only)
+                    tasks[data.task.id] = data.task;
+                    addTaskToDOM(data.task);
+                    updateTaskCounts();
+                    
+                    // Clear form
+                    document.getElementById('task-form').reset();
+                }
+            } catch (error) {
+                console.error('Error creating task:', error);
+            }
+        }
+
+        // Update task
+        async function updateTask(taskId, updates) {
+            try {
+                const response = await fetch(`/api/tasks/${taskId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...updates, updater: username })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Update local state and DOM (updater only)
+                    const oldStatus = tasks[taskId].status;
+                    tasks[taskId] = data.task;
+                    updateTaskInDOM(data.task, oldStatus);
+                    updateTaskCounts();
+                }
+            } catch (error) {
+                console.error('Error updating task:', error);
+            }
+        }
+
+        // Delete task
+        async function deleteTask(taskId) {
+            if (!confirm('Delete this task?')) return;
+
+            try {
+                const response = await fetch(`/api/tasks/${taskId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    // Remove from local state and DOM
+                    delete tasks[taskId];
+                    removeTaskFromDOM(taskId);
+                    updateTaskCounts();
+                }
+            } catch (error) {
+                console.error('Error deleting task:', error);
+            }
+        }
+
+        // DOM manipulation
+        function addTaskToDOM(task) {
+            const column = document.getElementById(getColumnId(task.status));
+            if (!column) return;
+
+            const taskElement = createTaskElement(task);
+            column.appendChild(taskElement);
+        }
+
+        function updateTaskInDOM(task, oldStatus = null) {
+            // Remove from old position if status changed
+            if (oldStatus && oldStatus !== task.status) {
+                removeTaskFromDOM(task.id);
+                addTaskToDOM(task);
+            } else {
+                // Update in place
+                const element = document.querySelector(`[data-task-id="${task.id}"]`);
+                if (element) {
+                    const newElement = createTaskElement(task);
+                    element.replaceWith(newElement);
+                }
+            }
+        }
+
+        function removeTaskFromDOM(taskId) {
+            const element = document.querySelector(`[data-task-id="${taskId}"]`);
+            if (element) {
+                element.remove();
+            }
+        }
+
+        function createTaskElement(task) {
+            const div = document.createElement('div');
+            div.className = `task-item bg-gray-800 border border-gray-700 rounded p-3 transition-opacity${task.status === 'done' ? ' opacity-75' : ''}`;
+            div.setAttribute('data-task-id', task.id);
+            div.setAttribute('data-status', task.status);
+
+            const priorityColor = {
+                'high': 'text-red-400',
+                'medium': 'text-yellow-400',
+                'low': 'text-green-400'
+            }[task.priority];
+
+            const titleClass = task.status === 'done' ? 'line-through' : '';
+
+            div.innerHTML = `
+                <div class="flex items-start justify-between">
+                    <div class="flex items-center space-x-2 flex-1 min-w-0">
+                        <div class="drag-handle text-gray-500 hover:text-gray-300 w-3 flex justify-center">
+                            <i class="fas fa-grip-vertical text-xs"></i>
+                        </div>
+                        
+                        <div class="flex-1 min-w-0">
+                            <h3 class="font-medium text-white text-sm editable truncate ${titleClass}" 
+                                onclick="editTaskTitle('${task.id}')">
+                                ${task.title}
+                            </h3>
+                            
+                            ${task.description ? `
+                            <p class="text-gray-400 text-xs mt-1 editable truncate" 
+                               onclick="editTaskDescription('${task.id}')">
+                                ${task.description}
+                            </p>
+                            ` : ''}
+                            
+                            <div class="flex items-center space-x-2 mt-2 text-xs">
+                                <span class="priority-${task.priority} px-2 py-0.5 rounded text-xs bg-gray-700 font-medium">
+                                    ${task.priority[0].toUpperCase()}
+                                </span>
+                                ${task.assignee ? `
+                                <span class="text-gray-500 flex items-center">
+                                    <i class="fas fa-user mr-1"></i>${task.assignee.substring(0, 8)}${task.assignee.length > 8 ? '...' : ''}
+                                </span>
+                                ` : ''}
+                                ${task.due_date ? `
+                                <span class="text-gray-500 flex items-center">
+                                    <i class="fas fa-calendar mr-1"></i>${task.due_date.substring(5)}
+                                </span>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-1 ml-2">
+                        <select onchange="changeTaskStatus('${task.id}', this.value)" 
+                                class="h-7 text-xs bg-gray-700 border border-gray-600 rounded px-1 text-gray-100 w-20">
+                            <option value="todo" ${task.status === 'todo' ? 'selected' : ''}>Todo</option>
+                            <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>Progress</option>
+                            <option value="done" ${task.status === 'done' ? 'selected' : ''}>Done</option>
+                        </select>
+                        
+                        <button onclick="deleteTask('${task.id}')" 
+                                class="h-7 w-7 text-gray-400 hover:text-red-400 rounded hover:bg-gray-700 transition-colors flex items-center justify-center">
+                            <i class="fas fa-trash text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            return div;
+        }
+
+        function clearAllColumns() {
+            ['todo-list', 'progress-list', 'done-list'].forEach(id => {
+                document.getElementById(id).innerHTML = '';
+            });
+        }
+
+        function getColumnId(status) {
+            const mapping = {
+                'todo': 'todo-list',
+                'in_progress': 'progress-list',
+                'done': 'done-list'
+            };
+            return mapping[status];
+        }
+
+        // Task editing functions
+        function editTaskTitle(taskId) {
+            const task = tasks[taskId];
+            if (!task) return;
+
+            const titleElement = document.querySelector(`[data-task-id="${taskId}"] .task-title`);
+            const currentTitle = titleElement.textContent;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = currentTitle;
+            input.className = 'bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm w-full';
+
+            input.onblur = () => saveTitle();
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') saveTitle();
+                if (e.key === 'Escape') cancelEdit();
+            };
+
+            function saveTitle() {
+                const newTitle = input.value.trim();
+                if (newTitle && newTitle !== currentTitle) {
+                    updateTask(taskId, { title: newTitle });
+                } else {
+                    cancelEdit();
+                }
+            }
+
+            function cancelEdit() {
+                titleElement.textContent = currentTitle;
+            }
+
+            titleElement.innerHTML = '';
+            titleElement.appendChild(input);
+            input.focus();
+            input.select();
+        }
+
+        function editTaskDescription(taskId) {
+            const task = tasks[taskId];
+            if (!task) return;
+
+            const descElement = document.querySelector(`[data-task-id="${taskId}"] p`);
+            const currentDesc = descElement.textContent;
+
+            const textarea = document.createElement('textarea');
+            textarea.value = currentDesc;
+            textarea.className = 'bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm w-full';
+            textarea.rows = 2;
+
+            textarea.onblur = () => saveDescription();
+            textarea.onkeydown = (e) => {
+                if (e.key === 'Escape') cancelEdit();
+            };
+
+            function saveDescription() {
+                const newDesc = textarea.value.trim();
+                if (newDesc !== currentDesc) {
+                    updateTask(taskId, { description: newDesc });
+                } else {
+                    cancelEdit();
+                }
+            }
+
+            function cancelEdit() {
+                descElement.textContent = currentDesc;
+            }
+
+            descElement.innerHTML = '';
+            descElement.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+        }
+
+        function changeTaskStatus(taskId, newStatus) {
+            updateTask(taskId, { status: newStatus });
+        }
+
+        // Drag and drop
+        function initializeDragDrop() {
+            const columns = document.querySelectorAll('.task-list');
+            
+            columns.forEach(column => {
+                if (column.sortableInstance) {
+                    column.sortableInstance.destroy();
+                }
+
+                column.sortableInstance = new Sortable(column, {
+                    group: 'tasks',
+                    handle: '.drag-handle',
+                    animation: 150,
+                    ghostClass: 'sortable-ghost',
+                    chosenClass: 'sortable-chosen',
+                    onStart: function(evt) {
+                        document.querySelectorAll('.drop-zone').forEach(zone => {
+                            if (zone !== evt.from) {
+                                zone.classList.add('drag-over');
+                            }
+                        });
+                    },
+                    onEnd: function(evt) {
+                        document.querySelectorAll('.drop-zone').forEach(zone => {
+                            zone.classList.remove('drag-over');
+                        });
+                        
+                        const taskId = evt.item.getAttribute('data-task-id');
+                        const newStatus = evt.to.getAttribute('data-status');
+                        const oldStatus = evt.from.getAttribute('data-status');
+
+                        if (newStatus !== oldStatus) {
+                            updateTask(taskId, { status: newStatus });
+                        }
+                    }
+                });
+            });
+        }
+
+        // Utility functions
+        function updateTaskCounts() {
+            const counts = { todo: 0, in_progress: 0, done: 0 };
+            
+            Object.values(tasks).forEach(task => {
+                counts[task.status]++;
+            });
+
+            document.getElementById('todo-count').textContent = counts.todo;
+            document.getElementById('progress-count').textContent = counts.in_progress;
+            document.getElementById('done-count').textContent = counts.done;
+        }
+
+        function updateMemberCount(count) {
+            document.getElementById('member-count').textContent = count;
+        }
+
+        function updateAssigneeOptions() {
+            const select = document.getElementById('task-assignee');
+            const currentValue = select.value;
+            
+            select.innerHTML = '<option value="">Unassigned</option>';
+            
+            members.forEach(member => {
+                const option = document.createElement('option');
+                option.value = member;
+                option.textContent = member;
+                if (member === currentValue) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        }
+
+        function refreshTasks() {
+            loadTasks();
+        }
+
+        function leaveRoom() {
+            if (confirm('Leave this room?')) {
+                window.location.href = '/';
+            }
+        }
+
+        // Initialize drag and drop
+        setTimeout(initializeDragDrop, 1000);
+    </script>
+</body>
+</html>

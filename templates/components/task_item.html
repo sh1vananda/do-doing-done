@@ -1,0 +1,50 @@
+<div class="task-item bg-gray-800 border border-gray-700 rounded p-3 transition-opacity" 
+     data-task-id="{{ task.id }}">
+    <div class="flex items-start justify-between">
+        <div class="flex items-center space-x-2 flex-1 min-w-0">
+            <div class="drag-handle text-gray-500 hover:text-gray-300 cursor-grab w-3 flex justify-center">
+                <i class="fas fa-grip-vertical text-xs"></i>
+            </div>
+            
+            <div class="flex-1 min-w-0">
+                <h3 class="font-medium text-white text-sm editable truncate" 
+                    onclick="makeEditable(this, 'title', '{{ task.id }}')">
+                    {{ task.title }}
+                </h3>
+                
+                {% if task.description %}
+                <p class="text-gray-400 text-xs mt-1 editable truncate" 
+                   onclick="makeEditable(this, 'description', '{{ task.id }}')">
+                    {{ task.description }}
+                </p>
+                {% endif %}
+                
+                <div class="flex items-center space-x-2 mt-2 text-xs">
+                    <span class="priority-{{ task.priority }} px-2 py-0.5 rounded text-xs bg-gray-700 font-medium">
+                        {{ task.priority[0].upper() }}
+                    </span>
+                    {% if task.assignee %}
+                    <span class="text-gray-500 flex items-center">
+                        <i class="fas fa-user mr-1"></i>{{ task.assignee[:8] }}{% if task.assignee|length > 8 %}...{% endif %}
+                    </span>
+                    {% endif %}
+                    {% if task.due_date %}
+                    <span class="text-gray-500 flex items-center">
+                        <i class="fas fa-calendar mr-1"></i>{{ task.due_date[5:] }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex items-center space-x-1 ml-2">
+            <button hx-delete="/tasks/{{ task.id }}" 
+                    hx-confirm="Delete this task?"
+                    hx-target="closest .task-item"
+                    hx-swap="outerHTML"
+                    class="h-7 w-7 text-gray-400 hover:text-red-400 rounded hover:bg-gray-700 transition-colors flex items-center justify-center">
+                <i class="fas fa-trash text-xs"></i>
+            </button>
+        </div>
+    </div>
+</div>

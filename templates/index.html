@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Collaborator</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Pure black theme with proper sizing */
+        body {
+            background: #0a0a0a !important;
+            font-size: 14px;
+        }
+        
+        .bg-gray-900 { background-color: #0a0a0a !important; }
+        .bg-gray-800 { background-color: #1a1a1a !important; }
+        .bg-gray-700 { background-color: #2a2a2a !important; }
+        .border-gray-800 { border-color: #2a2a2a !important; }
+        .border-gray-600 { border-color: #404040 !important; }
+        .text-white { color: #e5e5e5 !important; }
+        .text-gray-400 { color: #9ca3af !important; }
+        
+        .glass {
+            background: rgba(26, 26, 26, 0.95) !important;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(64, 64, 64, 0.3) !important;
+        }
+        
+        .btn-primary {
+            background-color: #2a2a2a !important;
+            border: 1px solid #404040 !important;
+            color: #e5e5e5 !important;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary:hover {
+            background-color: #404040 !important;
+            border-color: #525252 !important;
+        }
+        
+        input:focus, textarea:focus, select:focus, button:focus {
+            outline: none !important;
+            border-color: #525252 !important;
+            box-shadow: 0 0 0 1px #525252 !important;
+        }
+        
+        * {
+            --tw-ring-color: #525252 !important;
+        }
+        
+        /* Notification styles */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            min-width: 300px;
+            max-width: 400px;
+            padding: 16px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(64, 64, 64, 0.3);
+            transform: translateX(100%);
+            transition: all 0.3s ease;
+            opacity: 0;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        
+        .notification.success {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: rgba(16, 185, 129, 0.3);
+            color: #6ee7b7;
+        }
+        
+        .notification.error {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+        
+        .notification.info {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
+        }
+        
+        .notification.loading {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: rgba(245, 158, 11, 0.3);
+            color: #fcd34d;
+        }
+        
+        .notification-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+        
+        .notification-content {
+            flex: 1;
+        }
+        
+        .notification-title {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        
+        .notification-message {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+        
+        .notification-close {
+            background: none;
+            border: none;
+            color: inherit;
+            cursor: pointer;
+            padding: 4px;
+            margin-left: 8px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        
+        .notification-close:hover {
+            opacity: 1;
+        }
+        
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 h-screen overflow-hidden flex flex-col">
+    <!-- Header -->
+    <header class="border-b border-gray-800 py-4">
+        <div class="container mx-auto px-6">
+            <div class="text-center">
+                <h1 class="text-2xl font-bold text-white">Task Collaborator</h1>
+                <p class="text-gray-400 text-sm mt-1">Real-time collaborative task management</p>
+            </div>
+        </div>
+    </header>
+    
+    <!-- Main Content -->
+    <main class="flex-1 flex items-center justify-center p-6">
+        <div class="w-full max-w-5xl">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Create Room -->
+                <div class="glass rounded-lg p-6">
+                    <div class="flex items-center mb-4">
+                        <div class="w-10 h-10 bg-gray-700 rounded-lg flex items-center justify-center mr-3">
+                            <i class="fas fa-plus text-gray-300"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">Create New Room</h2>
+                            <p class="text-gray-400 text-xs">Start a new workspace</p>
+                        </div>
+                    </div>
+                    
+                    <form id="create-form" class="space-y-3">
+                        <input type="text" 
+                               id="room-name" 
+                               placeholder="Room name" 
+                               required
+                               maxlength="50"
+                               class="w-full h-9 bg-gray-800 border border-gray-600 rounded px-3 text-gray-100 text-sm">
+                        
+                        <input type="text" 
+                               id="creator-name" 
+                               placeholder="Your name" 
+                               required
+                               maxlength="30"
+                               class="w-full h-9 bg-gray-800 border border-gray-600 rounded px-3 text-gray-100 text-sm">
+                        
+                        <button type="submit" class="w-full h-9 btn-primary rounded font-medium text-sm flex items-center justify-center">
+                            <i class="fas fa-plus mr-2"></i>
+                            Create Room
+                        </button>
+                    </form>
+                </div>
+                
+                <!-- Join Room -->
+                <div class="glass rounded-lg p-6">
+                    <div class="flex items-center mb-4">
+                        <div class="w-10 h-10 bg-gray-700 rounded-lg flex items-center justify-center mr-3">
+                            <i class="fas fa-sign-in-alt text-gray-300"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">Join Existing Room</h2>
+                            <p class="text-gray-400 text-xs">Enter 6-character code</p>
+                        </div>
+                    </div>
+                    
+                    <form id="join-form" class="space-y-3">
+                        <input type="text" 
+                               id="join-room-id" 
+                               placeholder="Room code" 
+                               required
+                               maxlength="6"
+                               class="w-full h-9 bg-gray-800 border border-gray-600 rounded px-3 text-gray-100 text-sm font-mono uppercase">
+                        
+                        <input type="text" 
+                               id="join-username" 
+                               placeholder="Your name" 
+                               required
+                               maxlength="30"
+                               class="w-full h-9 bg-gray-800 border border-gray-600 rounded px-3 text-gray-100 text-sm">
+                        
+                        <button type="submit" class="w-full h-9 btn-primary rounded font-medium text-sm flex items-center justify-center">
+                            <i class="fas fa-sign-in-alt mr-2"></i>
+                            Join Room
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
+
+    <script>
+        // Notification system
+        function showNotification(type, title, message, duration = 5000) {
+            const container = document.getElementById('notification-container');
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            
+            const iconMap = {
+                success: 'fas fa-check-circle',
+                error: 'fas fa-exclamation-circle',
+                info: 'fas fa-info-circle',
+                loading: 'fas fa-spinner spinner'
+            };
+            
+            notification.innerHTML = `
+                <div style="display: flex; align-items: flex-start;">
+                    <div class="notification-icon">
+                        <i class="${iconMap[type]}"></i>
+                    </div>
+                    <div class="notification-content">
+                        <div class="notification-title">${title}</div>
+                        <div class="notification-message">${message}</div>
+                    </div>
+                    <button class="notification-close" onclick="hideNotification(this.parentElement)">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+            
+            container.appendChild(notification);
+            
+            // Show notification
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 100);
+            
+            // Auto-hide (except for loading)
+            if (type !== 'loading' && duration > 0) {
+                setTimeout(() => {
+                    hideNotification(notification);
+                }, duration);
+            }
+            
+            return notification;
+        }
+        
+        function hideNotification(notification) {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 300);
+        }
+        
+        function updateNotification(notification, type, title, message) {
+            const iconMap = {
+                success: 'fas fa-check-circle',
+                error: 'fas fa-exclamation-circle',
+                info: 'fas fa-info-circle',
+                loading: 'fas fa-spinner spinner'
+            };
+            
+            notification.className = `notification ${type} show`;
+            notification.querySelector('.notification-icon i').className = iconMap[type];
+            notification.querySelector('.notification-title').textContent = title;
+            notification.querySelector('.notification-message').textContent = message;
+        }
+
+        // Form handlers
+        document.getElementById('create-form').addEventListener('submit', createRoom);
+        document.getElementById('join-form').addEventListener('submit', joinRoom);
+        
+        // Auto-uppercase room code
+        document.getElementById('join-room-id').addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
+        });
+
+        async function createRoom(e) {
+            e.preventDefault();
+            
+            const roomName = document.getElementById('room-name').value.trim();
+            const creatorName = document.getElementById('creator-name').value.trim();
+            
+            if (!roomName || !creatorName) {
+                showNotification('error', 'Validation Error', 'Please fill in all fields');
+                return;
+            }
+            
+            const loadingNotification = showNotification('loading', 'Creating Room', 'Setting up your workspace...', 0);
+            
+            try {
+                const response = await fetch('/create-room', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: roomName, creator: creatorName })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateNotification(loadingNotification, 'success', 'Room Created!', `Room code: ${data.room_id}`);
+                    
+                    setTimeout(() => {
+                        hideNotification(loadingNotification);
+                        window.location.href = `/room/${data.room_id}?username=${encodeURIComponent(data.creator)}`;
+                    }, 2000);
+                } else {
+                    updateNotification(loadingNotification, 'error', 'Creation Failed', data.error || 'Failed to create room');
+                    setTimeout(() => hideNotification(loadingNotification), 4000);
+                }
+            } catch (error) {
+                updateNotification(loadingNotification, 'error', 'Network Error', 'Please check your connection and try again');
+                setTimeout(() => hideNotification(loadingNotification), 4000);
+            }
+        }
+
+        async function joinRoom(e) {
+            e.preventDefault();
+            
+            const roomId = document.getElementById('join-room-id').value.trim().toUpperCase();
+            const username = document.getElementById('join-username').value.trim();
+            
+            if (!roomId || !username) {
+                showNotification('error', 'Validation Error', 'Please fill in all fields');
+                return;
+            }
+            
+            if (roomId.length !== 6) {
+                showNotification('error', 'Invalid Code', 'Room code must be 6 characters');
+                return;
+            }
+            
+            const loadingNotification = showNotification('loading', 'Joining Room', 'Connecting to workspace...', 0);
+            
+            try {
+                const response = await fetch('/join-room', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ room_id: roomId, username: username })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateNotification(loadingNotification, 'success', 'Joining Room', `Welcome to ${data.room_name}!`);
+                    
+                    setTimeout(() => {
+                        hideNotification(loadingNotification);
+                        window.location.href = `/room/${data.room_id}?username=${encodeURIComponent(data.username)}`;
+                    }, 1500);
+                } else {
+                    updateNotification(loadingNotification, 'error', 'Join Failed', data.error || 'Failed to join room');
+                    setTimeout(() => hideNotification(loadingNotification), 4000);
+                }
+            } catch (error) {
+                updateNotification(loadingNotification, 'error', 'Network Error', 'Please check your connection and try again');
+                setTimeout(() => hideNotification(loadingNotification), 4000);
+            }
+        }
+
+        // Enter key navigation
+        document.getElementById('room-name').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('creator-name').focus();
+            }
+        });
+        
+        document.getElementById('creator-name').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('create-form').dispatchEvent(new Event('submit'));
+            }
+        });
+        
+        document.getElementById('join-room-id').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('join-username').focus();
+            }
+        });
+        
+        document.getElementById('join-username').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('join-form').dispatchEvent(new Event('submit'));
+            }
+        });
+    </script>
+</body>
+</html>
