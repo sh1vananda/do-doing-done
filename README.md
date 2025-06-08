@@ -22,7 +22,7 @@ A real-time collaborative task management application built with Flask and Socke
 ### Installation
 
 ```bash
-git clone 
+git clone https://github.com/sh1vananda/do-doing-done.git
 cd collaborative-task-manager
 pip install -r requirements.txt
 python app.py
